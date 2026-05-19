@@ -1,0 +1,747 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NoteAI — Smart Note Summarizer</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Mono:wght@300;400;500&display=swap');
+
+:root {
+  --bg: #f5f0e8;
+  --surface: #ede8de;
+  --surface2: #e3ddd2;
+  --ink: #1a1714;
+  --ink2: #4a4540;
+  --muted: #8a837a;
+  --accent: #c84b2f;
+  --accent2: #e8733a;
+  --border: #d4cdc4;
+  --success: #2d7a4f;
+  --white: #faf8f4;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  background: var(--bg);
+  color: var(--ink);
+  font-family: 'DM Mono', monospace;
+  min-height: 100vh;
+  position: relative;
+  overflow-x: hidden;
+}
+
+/* grain overlay */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.04'/%3E%3C/svg%3E");
+  pointer-events: none;
+  z-index: 100;
+  opacity: 0.5;
+}
+
+header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1.5rem 2.5rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.logo {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.logo-mark {
+  font-family: 'DM Serif Display', serif;
+  font-size: 1.6rem;
+  color: var(--ink);
+  letter-spacing: -1px;
+}
+
+.logo-mark span { color: var(--accent); font-style: italic; }
+
+.logo-tag {
+  font-size: 10px;
+  letter-spacing: 2px;
+  color: var(--muted);
+  text-transform: uppercase;
+  border: 1px solid var(--border);
+  padding: 2px 8px;
+  border-radius: 2px;
+}
+
+.api-badge {
+  font-size: 10px;
+  letter-spacing: 1px;
+  color: var(--muted);
+  text-transform: uppercase;
+}
+
+.api-badge span {
+  color: var(--success);
+  font-weight: 500;
+}
+
+/* main layout */
+main {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 3rem 2.5rem;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2rem;
+  align-items: start;
+}
+
+@media (max-width: 700px) {
+  main { grid-template-columns: 1fr; padding: 1.5rem 1rem; }
+  header { padding: 1rem; }
+}
+
+/* panels */
+.panel {
+  background: var(--white);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  overflow: hidden;
+  box-shadow: 0 2px 20px rgba(0,0,0,0.06);
+}
+
+.panel-header {
+  padding: 1rem 1.25rem;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.panel-title {
+  font-size: 11px;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.char-count {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+textarea {
+  width: 100%;
+  background: transparent;
+  border: none;
+  outline: none;
+  resize: none;
+  padding: 1.25rem;
+  font-family: 'DM Mono', monospace;
+  font-size: 13px;
+  line-height: 1.8;
+  color: var(--ink);
+  min-height: 280px;
+}
+
+textarea::placeholder { color: var(--muted); }
+
+/* mode selector */
+.mode-bar {
+  display: flex;
+  gap: 0;
+  border-top: 1px solid var(--border);
+}
+
+.mode-btn {
+  flex: 1;
+  padding: 10px 6px;
+  font-family: 'DM Mono', monospace;
+  font-size: 10px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  background: transparent;
+  border: none;
+  border-right: 1px solid var(--border);
+  color: var(--muted);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.mode-btn:last-child { border-right: none; }
+
+.mode-btn:hover { background: var(--surface); color: var(--ink); }
+
+.mode-btn.active {
+  background: var(--accent);
+  color: #fff;
+}
+
+/* action bar */
+.action-bar {
+  padding: 1rem 1.25rem;
+  border-top: 1px solid var(--border);
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.btn-run {
+  flex: 1;
+  padding: 10px 16px;
+  background: var(--ink);
+  color: var(--white);
+  border: none;
+  border-radius: 3px;
+  font-family: 'DM Mono', monospace;
+  font-size: 12px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: background 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.btn-run:hover { background: var(--accent); }
+.btn-run:disabled { opacity: 0.4; cursor: not-allowed; background: var(--ink); }
+
+.btn-clear {
+  padding: 10px 14px;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  font-family: 'DM Mono', monospace;
+  font-size: 11px;
+  color: var(--muted);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-clear:hover { border-color: var(--accent); color: var(--accent); }
+
+/* output panel */
+.output-body {
+  padding: 1.25rem;
+  min-height: 280px;
+  font-size: 13px;
+  line-height: 1.9;
+  color: var(--ink2);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.output-placeholder {
+  color: var(--muted);
+  font-size: 13px;
+  text-align: center;
+  padding: 3rem 1rem;
+  line-height: 2;
+}
+
+.output-placeholder .icon {
+  font-size: 2rem;
+  display: block;
+  margin-bottom: 0.5rem;
+  opacity: 0.4;
+}
+
+/* loading */
+.loader {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3rem 1.25rem;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.dot {
+  width: 6px; height: 6px;
+  background: var(--accent);
+  border-radius: 50%;
+  animation: bounce 1.2s infinite;
+}
+.dot:nth-child(2) { animation-delay: 0.2s; }
+.dot:nth-child(3) { animation-delay: 0.4s; }
+
+@keyframes bounce {
+  0%, 80%, 100% { transform: translateY(0); opacity: 0.3; }
+  40% { transform: translateY(-6px); opacity: 1; }
+}
+
+/* output actions */
+.output-actions {
+  padding: 0.75rem 1.25rem;
+  border-top: 1px solid var(--border);
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.btn-copy {
+  padding: 7px 14px;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  font-family: 'DM Mono', monospace;
+  font-size: 11px;
+  color: var(--muted);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-copy:hover { border-color: var(--success); color: var(--success); }
+.btn-copy.copied { border-color: var(--success); color: var(--success); }
+
+/* API key input */
+.api-key-bar {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 0 2.5rem 0;
+}
+
+.api-key-wrap {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 1rem 1.25rem;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 0;
+}
+
+.api-key-label {
+  font-size: 10px;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.api-key-input {
+  flex: 1;
+  background: var(--white);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 8px 12px;
+  font-family: 'DM Mono', monospace;
+  font-size: 12px;
+  color: var(--ink);
+  outline: none;
+  transition: border-color 0.2s;
+}
+
+.api-key-input:focus { border-color: var(--accent); }
+
+.api-key-hint {
+  font-size: 10px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+/* model badge */
+.model-select {
+  background: var(--white);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 8px 10px;
+  font-family: 'DM Mono', monospace;
+  font-size: 11px;
+  color: var(--ink2);
+  outline: none;
+  cursor: pointer;
+}
+
+/* token counter */
+.token-info {
+  max-width: 1100px;
+  margin: 0.75rem auto 0;
+  padding: 0 2.5rem;
+  display: flex;
+  justify-content: flex-end;
+  gap: 1.5rem;
+}
+
+.token-stat {
+  font-size: 10px;
+  letter-spacing: 1px;
+  color: var(--muted);
+  text-transform: uppercase;
+}
+
+.token-stat span { color: var(--accent); font-weight: 500; }
+
+/* history */
+.history-wrap {
+  max-width: 1100px;
+  margin: 1.5rem auto 3rem;
+  padding: 0 2.5rem;
+}
+
+.history-title {
+  font-size: 10px;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 0.75rem;
+}
+
+.history-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.history-item {
+  background: var(--white);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 10px 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  cursor: pointer;
+  transition: border-color 0.2s;
+}
+
+.history-item:hover { border-color: var(--accent2); }
+
+.history-preview {
+  font-size: 12px;
+  color: var(--ink2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+}
+
+.history-meta {
+  font-size: 10px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.history-mode {
+  font-size: 9px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  background: var(--surface2);
+  padding: 2px 7px;
+  border-radius: 2px;
+  color: var(--muted);
+}
+
+/* streaming cursor */
+@keyframes blink { 0%,100%{opacity:1} 50%{opacity:0} }
+.cursor { animation: blink 0.8s infinite; color: var(--accent); }
+
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">
+    <div class="logo-mark">Note<span>AI</span></div>
+    <div class="logo-tag">Beta</div>
+  </div>
+  <div class="api-badge">Powered by <span>MiMo API</span></div>
+</header>
+
+<!-- API Key bar -->
+<div class="api-key-bar">
+  <div class="api-key-wrap" style="margin-top:1.5rem;">
+    <span class="api-key-label">API Key</span>
+    <input class="api-key-input" type="password" id="api-key" placeholder="Paste your MiMo API key here...">
+    <select class="model-select" id="model-select">
+      <option value="MiMo-7B-RL">MiMo-7B-RL</option>
+      <option value="MiMo-72B-RL">MiMo-72B-RL</option>
+    </select>
+    <span class="api-key-hint">stored locally only</span>
+  </div>
+</div>
+
+<div class="token-info">
+  <div class="token-stat">Session tokens: <span id="token-total">0</span></div>
+  <div class="token-stat">Requests: <span id="req-count">0</span></div>
+</div>
+
+<!-- Main editor -->
+<main>
+  <!-- Input panel -->
+  <div class="panel">
+    <div class="panel-header">
+      <span class="panel-title">Input</span>
+      <span class="char-count" id="char-count">0 chars</span>
+    </div>
+    <textarea id="input-text" placeholder="Paste your notes, article, meeting transcript, or any long text here...&#10;&#10;NoteAI will process it using the selected mode below."></textarea>
+    <div class="mode-bar">
+      <button class="mode-btn active" data-mode="summarize" onclick="setMode(this)">Summarize</button>
+      <button class="mode-btn" data-mode="rewrite" onclick="setMode(this)">Rewrite</button>
+      <button class="mode-btn" data-mode="bullets" onclick="setMode(this)">Bullets</button>
+      <button class="mode-btn" data-mode="translate" onclick="setMode(this)">Translate</button>
+      <button class="mode-btn" data-mode="qa" onclick="setMode(this)">Q&amp;A</button>
+    </div>
+    <div class="action-bar">
+      <button class="btn-run" id="run-btn" onclick="runAI()">
+        <span id="btn-label">▶ Run</span>
+      </button>
+      <button class="btn-clear" onclick="clearAll()">Clear</button>
+    </div>
+  </div>
+
+  <!-- Output panel -->
+  <div class="panel">
+    <div class="panel-header">
+      <span class="panel-title">Output — <span id="mode-label" style="color:var(--accent)">Summarize</span></span>
+      <span class="char-count" id="out-char-count">—</span>
+    </div>
+    <div class="output-body" id="output-body">
+      <div class="output-placeholder">
+        <span class="icon">✦</span>
+        Your AI-processed result will appear here.<br>
+        Paste text, choose a mode, and hit Run.
+      </div>
+    </div>
+    <div class="output-actions" id="output-actions" style="display:none;">
+      <button class="btn-copy" id="copy-btn" onclick="copyOutput()">Copy result</button>
+    </div>
+  </div>
+</main>
+
+<!-- History -->
+<div class="history-wrap" id="history-wrap" style="display:none;">
+  <div class="history-title">Recent history</div>
+  <div class="history-list" id="history-list"></div>
+</div>
+
+<script>
+const MODES = {
+  summarize: {
+    label: 'Summarize',
+    prompt: (text) => `Summarize the following text into a concise, clear paragraph. Capture the main ideas and key points. Be concise but complete.\n\nText:\n${text}`
+  },
+  rewrite: {
+    label: 'Rewrite',
+    prompt: (text) => `Rewrite the following text to make it clearer, more professional, and better structured. Improve flow and readability while keeping the original meaning.\n\nText:\n${text}`
+  },
+  bullets: {
+    label: 'Bullet Points',
+    prompt: (text) => `Convert the following text into a structured list of bullet points. Use clear, concise language. Group related points together.\n\nText:\n${text}`
+  },
+  translate: {
+    label: 'Translate',
+    prompt: (text) => `Detect the language of the following text, then translate it to the other language: if it's Indonesian translate to English, if it's English translate to Indonesian. Only provide the translation, no explanation.\n\nText:\n${text}`
+  },
+  qa: {
+    label: 'Q&A',
+    prompt: (text) => `Read the following text and generate 5 insightful questions and answers based on its content. Format as:\nQ: [question]\nA: [answer]\n\nText:\n${text}`
+  }
+};
+
+let currentMode = 'summarize';
+let tokenTotal = 0;
+let reqCount = 0;
+let history = [];
+let outputText = '';
+
+// Char counter
+document.getElementById('input-text').addEventListener('input', function() {
+  document.getElementById('char-count').textContent = this.value.length + ' chars';
+});
+
+// Load saved API key
+const savedKey = localStorage.getItem('noteai_apikey');
+if (savedKey) document.getElementById('api-key').value = savedKey;
+document.getElementById('api-key').addEventListener('change', function() {
+  localStorage.setItem('noteai_apikey', this.value);
+});
+
+function setMode(btn) {
+  document.querySelectorAll('.mode-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  currentMode = btn.dataset.mode;
+  document.getElementById('mode-label').textContent = MODES[currentMode].label;
+}
+
+async function runAI() {
+  const text = document.getElementById('input-text').value.trim();
+  const apiKey = document.getElementById('api-key').value.trim();
+  const model = document.getElementById('model-select').value;
+
+  if (!text) { showError('Please paste some text first.'); return; }
+  if (!apiKey) { showError('Please enter your MiMo API key.'); return; }
+
+  const btn = document.getElementById('run-btn');
+  btn.disabled = true;
+  document.getElementById('btn-label').textContent = '◌ Processing...';
+
+  // Show loader
+  document.getElementById('output-body').innerHTML = `
+    <div class="loader">
+      <div class="dot"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+      <span style="margin-left:4px;">Thinking...</span>
+    </div>`;
+  document.getElementById('output-actions').style.display = 'none';
+
+  const prompt = MODES[currentMode].prompt(text);
+
+  try {
+    const response = await fetch('https://api.xiaomimimo.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`
+      },
+      body: JSON.stringify({
+        model: model,
+        messages: [{ role: 'user', content: prompt }],
+        stream: true,
+        max_tokens: 1024
+      })
+    });
+
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error(err.error?.message || `HTTP ${response.status}`);
+    }
+
+    // Streaming
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let result = '';
+    let inputTokens = 0;
+    let outputTokens = 0;
+
+    document.getElementById('output-body').innerHTML = '';
+    const outputEl = document.getElementById('output-body');
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      const chunk = decoder.decode(value);
+      const lines = chunk.split('\n').filter(l => l.startsWith('data: '));
+
+      for (const line of lines) {
+        const data = line.replace('data: ', '').trim();
+        if (data === '[DONE]') continue;
+        try {
+          const json = JSON.parse(data);
+          const delta = json.choices?.[0]?.delta?.content || '';
+          result += delta;
+          outputEl.textContent = result;
+          outputEl.scrollTop = outputEl.scrollHeight;
+
+          if (json.usage) {
+            inputTokens = json.usage.prompt_tokens || 0;
+            outputTokens = json.usage.completion_tokens || 0;
+          }
+        } catch {}
+      }
+    }
+
+    outputText = result;
+    document.getElementById('out-char-count').textContent = result.length + ' chars';
+    document.getElementById('output-actions').style.display = 'flex';
+
+    // Update token counter
+    const used = inputTokens + outputTokens || Math.ceil((prompt.length + result.length) / 4);
+    tokenTotal += used;
+    reqCount++;
+    document.getElementById('token-total').textContent = tokenTotal.toLocaleString();
+    document.getElementById('req-count').textContent = reqCount;
+
+    // Add to history
+    addHistory(text, result, currentMode);
+
+  } catch (err) {
+    document.getElementById('output-body').innerHTML = `
+      <div style="padding:1.25rem; color:#c84b2f; font-size:13px; line-height:1.8;">
+        ✗ Error: ${err.message}<br><br>
+        <span style="color:var(--muted); font-size:12px;">
+          Make sure your MiMo API key is correct and the model is available.<br>
+          Get your key at: platform.xiaomimimo.com
+        </span>
+      </div>`;
+  }
+
+  btn.disabled = false;
+  document.getElementById('btn-label').textContent = '▶ Run';
+}
+
+function showError(msg) {
+  document.getElementById('output-body').innerHTML = `
+    <div style="padding:1.25rem; color:#c84b2f; font-size:13px;">${msg}</div>`;
+}
+
+function clearAll() {
+  document.getElementById('input-text').value = '';
+  document.getElementById('char-count').textContent = '0 chars';
+  document.getElementById('output-body').innerHTML = `
+    <div class="output-placeholder">
+      <span class="icon">✦</span>
+      Your AI-processed result will appear here.<br>
+      Paste text, choose a mode, and hit Run.
+    </div>`;
+  document.getElementById('output-actions').style.display = 'none';
+  document.getElementById('out-char-count').textContent = '—';
+  outputText = '';
+}
+
+function copyOutput() {
+  navigator.clipboard.writeText(outputText).then(() => {
+    const btn = document.getElementById('copy-btn');
+    btn.textContent = '✓ Copied!';
+    btn.classList.add('copied');
+    setTimeout(() => {
+      btn.textContent = 'Copy result';
+      btn.classList.remove('copied');
+    }, 2000);
+  });
+}
+
+function addHistory(input, output, mode) {
+  history.unshift({ input, output, mode, time: new Date() });
+  if (history.length > 5) history.pop();
+
+  const wrap = document.getElementById('history-wrap');
+  const list = document.getElementById('history-list');
+  wrap.style.display = 'block';
+  list.innerHTML = history.map((h, i) => `
+    <div class="history-item" onclick="loadHistory(${i})">
+      <span class="history-mode">${MODES[h.mode].label}</span>
+      <span class="history-preview">${h.output.substring(0, 100).replace(/\n/g,' ')}...</span>
+      <span class="history-meta">${h.time.toLocaleTimeString()}</span>
+    </div>
+  `).join('');
+}
+
+function loadHistory(i) {
+  const h = history[i];
+  document.getElementById('input-text').value = h.input;
+  document.getElementById('char-count').textContent = h.input.length + ' chars';
+  document.getElementById('output-body').textContent = h.output;
+  outputText = h.output;
+  document.getElementById('out-char-count').textContent = h.output.length + ' chars';
+  document.getElementById('output-actions').style.display = 'flex';
+  // set mode
+  document.querySelectorAll('.mode-btn').forEach(b => {
+    b.classList.toggle('active', b.dataset.mode === h.mode);
+  });
+  currentMode = h.mode;
+  document.getElementById('mode-label').textContent = MODES[h.mode].label;
+}
+</script>
+</body>
+</html>
